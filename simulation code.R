@@ -1,15 +1,16 @@
 ######################################################################
 ##### DESCRIPTION SIMULATION STUDY COMMENT ON MAXWELL ET AL. (2015) 
+##### AUTHOR : Robbie C. M. van Aert
 ##### GOAL: EXAMINE CONSEQUENCES FOR SCIENCE UNDER DIFFERENT PUBLISHING SCENARIOS
 #
 ### INDEPENDENT VARIABLES: 4 X 3 X 3 = 36 CELLS
-# POPULATION EFFECT SIZE (mus): 0; 0.2; 0.5; 0.8
+# POPULATION EFFECT SIZE (mus): 0; 0.2; 0.5
 # SAMPLE SIZE PER GROUP (n.specs): 25; 1750; 0 (= 1/72 PROBABILITY OF OBSERVING SAMPLE SIZE OF 
 #                                  1750 AND 71/72 PROBABILITY OF OBSERVING SAMPLE SIZE OF 25)
 # SCENARIOS (scens):
-# - "new": ONLY THE REPLICATIONS ARE INCLUDED IN META-ANALYSIS (FIRST STUDY IS OMITTED)
-# - "all.pub.1": NON-SIGNIFICANT STUDIES HAVE A PROBABILITY OF 0.1 TO BE INCLUDED IN META-ANALYSIS
-# - "new.pub.1": ONLY THE REPLICATIONS AND NON-SIGNIFICANT STUDIES HAVE A PROBABILITY OF 0.1 TO BE INCLUDED IN META-ANALYSIS
+# - "ideal": ONLY THE REPLICATIONS ARE INCLUDED IN META-ANALYSIS (FIRST STUDY IS OMITTED)
+# - "current": NON-SIGNIFICANT STUDIES HAVE A PROBABILITY OF 0.05 TO BE INCLUDED IN META-ANALYSIS
+# - "maxwell": ONLY THE REPLICATIONS AND NON-SIGNIFICANT STUDIES HAVE A PROBABILITY OF 0.05 TO BE INCLUDED IN META-ANALYSIS
 #
 ### DEPENDENT VARIABELS
 # MEAN OF META-ANALYTIC ESTIMATE
@@ -18,7 +19,7 @@
 # SD OF AVERAGE SAMPLE SIZE IN EACH META-ANALYSIS
 # HOW OFTEN NULL-HYPOTHESIS OF NO EFFECT WAS REJECTED
 # HOW OFTEN UPPER BOUND OF CONFIDENCE INTERVAL WAS LARGER THAN 0.1
-##### END DESCRIPTION SIMULATION STUDY #####
+##### END DESCRIPTION SIMULATION STUDY
 ######################################################################
 
 rm(list = ls()) # Clean workspace
@@ -28,8 +29,8 @@ fix <- function(yi, vi) {
   wi <- 1/vi # Weight per study
   est <- sum(yi*wi)/sum(wi) # FE meta-analytic estimate
   se <- sqrt(1/sum(wi)) # Standard error of meta-analytic estimate
-  ci.lb <- est-qnorm(0.975)*se # Lower bound CI meta-analytical estimate
-  ci.ub <- est+qnorm(0.975)*se # Upper bound CI meta-analytical estimate
+  ci.lb <- est-qnorm(0.95)*se # Lower bound 90% CI meta-analytical estimate
+  ci.ub <- est+qnorm(0.95)*se # Upper bound 90% CI meta-analytical estimate
   zval <- est/se # Z-value for test of no effect
   pval.0 <- pnorm(zval, lower.tail = FALSE) # Compute one-sided p-value
   
@@ -40,10 +41,10 @@ fix <- function(yi, vi) {
 ### CONDITIONS ###
 ##################
 
-mus <- c(0, 0.2, 0.5, 0.8) # Population effect size
-n.specs <- c(25, 1750, 0) # Sample sizes (0 refers to 1/72 probability of observing a sample size of 1750 and 71/72 probability of a sample size of 25)
-scens <- c("new", "all.pub.1", "new.pub.1") # Different scenarios
-reps <- 10000 # Number of replications
+mus <- c(0, 0.2, 0.5) # Population effect size
+n.specs <- c(25, 0, 1750) # Sample sizes (0 refers to 1/72 probability of observing a sample size of 1750 and 71/72 probability of a sample size of 25)
+scens <- c("current", "maxwell", "ideal") # Different scenarios
+reps <- 100000 # Number of replications
 
 ### Empty objects for storing results
 res.est <- res.est.sd <- res.ni <- res.ni.sd <- res.h1 <- res.ub <- 
@@ -65,11 +66,11 @@ for (mu in mus) {
       for (i in 1:reps) {
         
         crit <- TRUE # Criterion for staying in while loop below
+        ni.all <- numeric() # Create empty object
         
-        if (scen == "new" | scen == "new.pub.1") { # If meta-analysis is based on only replications create empty objects
-          yi <- sei <- ni.all <- numeric()
-        } else { # If meta-analysis is based on all studies (scenario "all.pub.1")
-          ni.all <- 25
+        if (scen == "ideal" | scen == "maxwell") { # If meta-analysis is based on only replications create empty objects
+          yi <- sei <- numeric() 
+        } else { # If meta-analysis is based on all studies (scenario "current")
           sei <- sqrt(2/25) # Compute standard error
           pcv <- pnorm(qnorm(.975)*sei, mean = mu, sd = sei) # Probability of observing significant result given mu and standard error
           yi <- qnorm(runif(1, min = pcv, max = 1), mean = mu, sd = sei) # Generated observed effect size given being significant
@@ -83,17 +84,17 @@ for (mu in mus) {
             } else { ni <- 25 }
           } else { ni <- n.spec } # Use prespecified sample size
           
-          if (scen == "new") {
+          if (scen == "ideal") {
             sei <- c(sei, sqrt(2/ni)) # Compute and store standard error
             ni.all <- c(ni.all, ni) # Store sample size
           }
           
-          if (scen == "all.pub.1" | scen == "new.pub.1") { # Generate studies for scenario "all.pub.1" and "new.pub.1"              
-            if (length(yi) == 0) { # Do not conduct meta-analysis till a study is included in meta-analysis ("new.pub.1")
+          if (scen == "current" | scen == "maxwell") { # Generate studies for scenario "current" and "maxwell"              
+            if (length(yi) == 0) { # Do not conduct meta-analysis till a study is included in meta-analysis ("maxwell")
               while(length(yi) == 0) { 
                 yi.pub <- rnorm(1, mean = mu, sd = sqrt(2/ni)) # Generate effect size
                 pval.pub <- pnorm(yi.pub/sqrt(2/ni), lower.tail = FALSE) # Compute p-value
-                if (pval.pub < .025 | runif(1) < 0.1) { # Include study in meta-analysis if p-value is below .025 or randomly generated number is below 0.1
+                if (pval.pub < .025 | runif(1) < 0.05 | ni == 1750) { # Include study in meta-analysis if p-value < .025 or randomly generated number < 0.05 or sample size is 1750 
                   yi <- c(yi, yi.pub)
                   sei <- sqrt(2/ni)
                   ni.all <- c(ni.all, ni)
@@ -102,13 +103,13 @@ for (mu in mus) {
             } else {
               yi.pub <- rnorm(1, mean = mu, sd = sqrt(2/ni)) # Generate effect size
               pval.pub <- pnorm(yi.pub/sqrt(2/ni), lower.tail = FALSE) # Compute p-value
-              if (pval.pub < .025 | runif(1) < 0.1) { # Include study in meta-analysis if p-value is below .025 or randomly generated number is below 0.1
+              if (pval.pub < .025 | runif(1) < 0.05 | ni == 1750) { # Include study in meta-analysis if p-value < .025 or randomly generated number < 0.05 or sample size is 1750 
                 yi <- c(yi, yi.pub)
                 sei <- c(sei, sqrt(2/ni))
                 ni.all <- c(ni.all, ni)
               } else { ni.all <- c(ni.all, ni) }      
             }
-          } else { yi <- c(yi, rnorm(1, mean = mu, sd = sqrt(2/ni))) } # Generate effect size for scenario "new"
+          } else { yi <- c(yi, rnorm(1, mean = mu, sd = sqrt(2/ni))) } # Generate effect size for scenario "ideal"
           
           fe <- fix(yi = yi, vi = sei^2) # Conduct fixed-effect meta-analysis
           
