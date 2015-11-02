@@ -24,6 +24,10 @@
 
 rm(list = ls()) # Clean workspace
 
+#################
+### FUNCTIONS ###
+#################
+
 ### Function for fixed-effect meta-analysis
 fix <- function(yi, vi) {
   wi <- 1/vi # Weight per study
