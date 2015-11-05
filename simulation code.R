@@ -5,8 +5,8 @@
 #
 ### INDEPENDENT VARIABLES: 4 X 3 X 3 = 36 CELLS
 # POPULATION EFFECT SIZE (mus): 0; 0.2; 0.5
-# SAMPLE SIZE PER GROUP (n.specs): 25; 1750; 0 (= 1/72 PROBABILITY OF OBSERVING SAMPLE SIZE OF 
-#                                  1750 AND 71/72 PROBABILITY OF OBSERVING SAMPLE SIZE OF 25)
+# SAMPLE SIZE PER GROUP (n.specs): 25; 1750; 0 (= 1/71 PROBABILITY OF OBSERVING SAMPLE SIZE OF 
+#                                  1750 AND 70/71 PROBABILITY OF OBSERVING SAMPLE SIZE OF 25)
 # SCENARIOS (scens):
 # - "ideal": ONLY THE REPLICATIONS ARE INCLUDED IN META-ANALYSIS (FIRST STUDY IS OMITTED)
 # - "current": NON-SIGNIFICANT STUDIES HAVE A PROBABILITY OF 0.05 TO BE INCLUDED IN META-ANALYSIS
@@ -46,9 +46,9 @@ fix <- function(yi, vi) {
 ##################
 
 mus <- c(0, 0.2, 0.5) # Population effect size
-n.specs <- c(25, 0, 1750) # Sample sizes (0 refers to 1/72 probability of observing a sample size of 1750 and 71/72 probability of a sample size of 25)
+n.specs <- c(25, 0, 1750) # Sample sizes per group (0 refers to 1/71 probability of observing a sample size of 1750 and 70/71 probability of a sample size of 25)
 scens <- c("current", "maxwell", "ideal") # Different scenarios
-reps <- 100000 # Number of replications
+reps <- 10000 # Number of replications
 
 ### Empty objects for storing results
 res.est <- res.est.sd <- res.ni <- res.ni.sd <- res.h1 <- res.ub <- 
@@ -76,15 +76,15 @@ for (mu in mus) {
           yi <- sei <- numeric() 
         } else { # If meta-analysis is based on all studies (scenario "current")
           sei <- sqrt(2/25) # Compute standard error
-          pcv <- pnorm(qnorm(.975)*sei, mean = mu, sd = sei) # Probability of observing significant result given mu and standard error
+          pcv <- pnorm(qnorm(.95)*sei, mean = mu, sd = sei) # Probability of observing significant result given mu and standard error
           yi <- qnorm(runif(1, min = pcv, max = 1), mean = mu, sd = sei) # Generated observed effect size given being significant
           fe <- fix(yi = yi, vi = sei^2) # Conduct fixed-effect meta-analysis    
         }
         
-        while (crit == TRUE) { # Stay in while loop till width of CI is larger than 0.2
+        while (crit == TRUE) { # Stay in while loop till crit is FALSE
           
           if (n.spec == 0) { # Determine whether a study with a large or small sample size has to be generated 
-            if (runif(1) < 1/72) { ni <- 1750 
+            if (runif(1) < 1/71) { ni <- 1750 
             } else { ni <- 25 }
           } else { ni <- n.spec } # Use prespecified sample size
           
@@ -98,7 +98,7 @@ for (mu in mus) {
               while(length(yi) == 0) { 
                 yi.pub <- rnorm(1, mean = mu, sd = sqrt(2/ni)) # Generate effect size
                 pval.pub <- pnorm(yi.pub/sqrt(2/ni), lower.tail = FALSE) # Compute p-value
-                if (pval.pub < .025 | runif(1) < 0.05 | ni == 1750) { # Include study in meta-analysis if p-value < .025 or randomly generated number < 0.05 or sample size is 1750 
+                if (pval.pub < .05 | runif(1) < 0.05 | ni == 1750) { # Include study in meta-analysis if p-value < .05 or randomly generated number < 0.05 or sample size is 1750 
                   yi <- c(yi, yi.pub)
                   sei <- sqrt(2/ni)
                   ni.all <- c(ni.all, ni)
@@ -107,7 +107,7 @@ for (mu in mus) {
             } else {
               yi.pub <- rnorm(1, mean = mu, sd = sqrt(2/ni)) # Generate effect size
               pval.pub <- pnorm(yi.pub/sqrt(2/ni), lower.tail = FALSE) # Compute p-value
-              if (pval.pub < .025 | runif(1) < 0.05 | ni == 1750) { # Include study in meta-analysis if p-value < .025 or randomly generated number < 0.05 or sample size is 1750 
+              if (pval.pub < .05 | runif(1) < 0.05 | ni == 1750) { # Include study in meta-analysis if p-value < .05 or randomly generated number < 0.05 or sample size is 1750 
                 yi <- c(yi, yi.pub)
                 sei <- c(sei, sqrt(2/ni))
                 ni.all <- c(ni.all, ni)
@@ -117,21 +117,21 @@ for (mu in mus) {
           
           fe <- fix(yi = yi, vi = sei^2) # Conduct fixed-effect meta-analysis
           
-          crit <- fe$ci.ub - fe$ci.lb > 0.2 # Return FALSE if width of CI is lower than 0.2
-          
+          if (scen == "current" | scen == "ideal") { crit <- fe$ci.ub - fe$ci.lb > 0.2 } # Return FALSE if width of CI is lower than 0.2
+          if (scen == "maxwell") { crit <- round(sum(2/sei^2)) < 1750 } # Return FALSE if total sample size is larger than 1750
         }
         
         out.est[i] <- fe$est # Store estimate of fixed-effect meta-analysis
-        out.ni[i] <- sum(ni.all) # Store sum of sample size in each meta-analysis
-        out.h1[i] <- fe$pval < .025 # Store whether the effect is significantly larger than 0 (two-tailed test and only tested in predicted direction)
+        out.ni[i] <- sum(2*ni.all) # Store sum of total sample size in each meta-analysis
+        out.h1[i] <- fe$pval < .05 # Store whether the effect is significantly larger than 0 (two-tailed test and only tested in predicted direction)
         out.ub[i] <- fe$ci.ub > 0.1 # Store whether lower bound of CI is larger than 0.1
         
       }
       
       res.est[scen, as.character(mu), as.character(n.spec)] <- round(mean(out.est), 3) # Compute mean of meta-analytic estimates
       res.est.sd[scen, as.character(mu), as.character(n.spec)] <- round(sd(out.est), 3) # Compute standard deviation of meta-analytic estimates
-      res.ni[scen, as.character(mu), as.character(n.spec)] <- round(mean(out.ni), 3) # Compute mean of sum of sample size in each meta-analysis
-      res.ni.sd[scen, as.character(mu), as.character(n.spec)] <- round(sd(out.ni), 3) # Compute standard deviation of average sample size in each meta-analysis
+      res.ni[scen, as.character(mu), as.character(n.spec)] <- round(mean(out.ni), 3) # Compute mean of sum of total sample size in each meta-analysis
+      res.ni.sd[scen, as.character(mu), as.character(n.spec)] <- round(sd(out.ni), 3) # Compute standard deviation of average total sample size in each meta-analysis
       res.h1[scen, as.character(mu), as.character(n.spec)] <- round(mean(out.h1), 3) # Compute how often null-hypothesis of no effect was rejected
       res.ub[scen, as.character(mu), as.character(n.spec)] <- round(mean(out.ub), 3) # Compute how often lower bound of CI was larger than 0.1
       
